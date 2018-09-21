@@ -1,0 +1,12 @@
+{
+  "name": "trigger",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "Apache License 2.0",
+  "dependencies": {
+    "moment": "^2.19.1"
+  },
+  "devDependencies": {
+    "aws-sdk": "^2.147.0"
+  }
+}

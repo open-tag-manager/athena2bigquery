@@ -1,0 +1,46 @@
+gcloud:
+  # Google Cloud Project ID
+  projectId: 'api-project-AAAAAAAAAAAA'
+  bigquery:
+    # BigQuery dataset
+    dataset: hogeapi
+    # BigQuery table prefix
+    tableNamePrefix: 's3web'
+  storage:
+    # Data storage for BigQuery import
+    bucket: hoge-api
+
+aws:
+  s3:
+    # Athena result
+    athena_result_bucket: aws-athena-query-results-AAAAAAAAAAAA-REGION
+    athena_result_prefix: ''
+    # Schema data configuration
+    schema_bucket: BUCKET
+    schema_object: collect/schema.json
+  athena:
+    # Athena dataset
+    database: alb_log
+    # Athena table
+    table: s3_logs4
+    # Region for Athena
+    region: REGION
+
+# If you don't need partition for bq, set empty
+partition: 'service_id'
+
+# Parser configuration
+parser:
+  # If there is no columns, set []
+  queryToJson:
+    qs_json:
+      target: 'request_uri'
+  requestColumns:
+    qs_service_id:
+      target: 'request_uri'
+      pattern: '(?:&|\?)service_id=([^&\s]+)'
+      type: 'String'
+    qs_user_id:
+      target: 'request_uri'
+      pattern: '(?:&|\?)user_id=([^&\s]+)'
+      type: 'String'

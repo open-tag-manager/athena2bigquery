@@ -1,0 +1,23 @@
+[
+  {"name": "bucket_owner",       "type": "STRING"},
+  {"name": "bucket",             "type": "STRING"},
+  {"name": "time",               "type": "TIMESTAMP"},
+  {"name": "remote_ip",          "type": "STRING"},
+  {"name": "requester",          "type": "STRING"},
+  {"name": "request_id",         "type": "STRING"},
+  {"name": "operation",          "type": "STRING"},
+  {"name": "key",                "type": "STRING"},
+  {"name": "request_uri",        "type": "STRING"},
+  {"name": "http_status",        "type": "INTEGER"},
+  {"name": "error_code",         "type": "STRING"},
+  {"name": "bytes_sent",         "type": "INTEGER"},
+  {"name": "object_size",        "type": "INTEGER"},
+  {"name": "total_time",         "type": "INTEGER"},
+  {"name": "turn_around_time",   "type": "INTEGER"},
+  {"name": "referrer",           "type": "STRING"},
+  {"name": "user_agent",         "type": "STRING"},
+  {"name": "qs_json",            "type": "STRING"},
+  {"name": "qs_service_id",      "type": "STRING"},
+  {"name": "qs_user_id",         "type": "STRING"},
+  {"name": "version_id",         "type": "STRING"}
+]
