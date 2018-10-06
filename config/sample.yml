@@ -26,6 +26,8 @@ aws:
     # Region for Athena
     region: REGION
 
+log_type: 's3'
+
 # If you don't need partition for bq, set empty
 partition: 'service_id'
 

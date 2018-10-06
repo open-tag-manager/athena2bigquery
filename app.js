@@ -1,12 +1,11 @@
-const fs = require('fs');
 const {S3, Athena} = require('aws-sdk');
 const task = require('promise-util-task');
 const _ = require('lodash');
 const yaml = require('js-yaml');
 const moment = require('moment');
 const s3 = new S3();
-const url = require('url')
-const qs = require('qs')
+const url = require('url');
+const qs = require('qs');
 
 let targetDate = null;
 if (process.env.DATE) {
@@ -15,17 +14,14 @@ if (process.env.DATE) {
   targetDate = moment().subtract(1, 'day');
 }
 
-const tomorrowTargetDate = moment(targetDate).add(1, 'day')
+const tomorrowTargetDate = moment(targetDate).add(1, 'day');
 const year = targetDate.year();
 const month = targetDate.month() + 1;
 const day = targetDate.date();
 const t_year = tomorrowTargetDate.year();
 const t_month = tomorrowTargetDate.month() + 1;
 const t_day = tomorrowTargetDate.date();
-const dateCriteria = `((year = ${year} AND month = ${month} AND day = ${day}) OR 
-(year = ${t_year} AND month = ${t_month} AND day = ${t_day}))
-AND date_parse(datetime, '%d/%b/%Y:%H:%i:%s +0000') >= timestamp '${moment(targetDate).startOf('day').format('YYYY-MM-DD HH:mm:ss')}'
-AND date_parse(datetime, '%d/%b/%Y:%H:%i:%s +0000') <= timestamp '${moment(targetDate).endOf('day').format('YYYY-MM-DD HH:mm:ss')}'`;
+let dateCriteria = null;
 
 let config = null;
 let athena = null;
@@ -58,7 +54,7 @@ const waitAthena = (executionId) => {
 
     console.dir(result);
     throw new Error(result);
-  })
+  });
 };
 
 const resultAthena = (executionId, nextToken = null, results = []) => {
@@ -128,41 +124,60 @@ const executeDataQuery = (partitionValue = null, partitionBy = null) => {
         const object = {};
 
         let data = record.Data;
+
+        if (data[0].VarCharValue.match(/^#/)) {
+          return
+        }
+
         for (let s in schema) {
           const sData = schema[s];
           const idx = fieldIndex(sData.name);
+
+          if (config.log_type === 'cloudfront' && sData.name === 'time') {
+            continue;
+          }
+
           if (idx === -1) {
             continue;
           }
 
           switch (sData.type) {
-            case "STRING":
-              object[sData.name] = toStr(data[idx].VarCharValue);
-              break;
-            case "INTEGER":
-              object[sData.name] = toInt(data[idx].VarCharValue);
-              break;
-            case "TIMESTAMP":
-              object[sData.name] = moment(data[idx].VarCharValue, 'DD/MMM/YYYY:HH:mm:ss ZZ').toDate();
-              break;
+          case 'STRING':
+            object[sData.name] = toStr(data[idx].VarCharValue);
+            break;
+          case 'INTEGER':
+            object[sData.name] = toInt(data[idx].VarCharValue);
+            break;
+          case 'TIMESTAMP':
+            object[sData.name] = moment(data[idx].VarCharValue, 'DD/MMM/YYYY:HH:mm:ss ZZ').toDate();
+            break;
           }
+        }
+
+        if (config.log_type === 'cloudfront') {
+          object['time'] = moment.utc(`${data[fieldIndex('date')].VarCharValue} ${data[fieldIndex('time')].VarCharValue}`).toDate();
         }
 
         if (config.parser.queryToJson) {
           for (let name in config.parser.queryToJson) {
             object[name] = null;
             const conf = config.parser.queryToJson[name];
-            const target = object[conf.target]
+            const target = object[conf.target];
             if (!target) {
               object[name] = null;
             } else {
-              const sTarget = target.split(' ');
-              if (sTarget.length > 1) {
-                const query = url.parse(sTarget[1]).query;
-                if (query) {
-                  object[name] = JSON.stringify(qs.parse(query));
+              if (config.log_type === 'cloudfront') {
+                object[name] = JSON.stringify(qs.parse(target));
+              } else {
+                const sTarget = target.split(' ');
+                if (sTarget.length > 1) {
+                  const query = url.parse(sTarget[1]).query;
+                  if (query) {
+                    object[name] = JSON.stringify(qs.parse(query));
+                  }
                 }
               }
+
             }
           }
         }
@@ -181,7 +196,7 @@ const executeDataQuery = (partitionValue = null, partitionBy = null) => {
           }
         }
 
-        ws.write(JSON.stringify(object) + "\n");
+        ws.write(JSON.stringify(object) + '\n');
       });
 
       if (result.NextToken) {
@@ -189,10 +204,10 @@ const executeDataQuery = (partitionValue = null, partitionBy = null) => {
       }
 
       ws.end();
-    })
-  }
+    });
+  };
 
-  let query = `SELECT * FROM ${config.aws.athena.database}.${config.aws.athena.table} WHERE ${dateCriteria}`
+  let query = `SELECT * FROM ${config.aws.athena.database}.${config.aws.athena.table} WHERE ${dateCriteria}`;
   if (partitionBy) {
     query += ` AND ${partitionBy} = '${partitionValue}'`;
   }
@@ -210,15 +225,15 @@ const executeDataQuery = (partitionValue = null, partitionBy = null) => {
     return waitAthena(result.QueryExecutionId);
   }).then((result) => {
     return new Promise((resolve, error) => {
-      let fileName = null
+      let fileName = null;
       if (partitionBy) {
-        fileName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}/${tableNamePrefix}_${partitionValue}_${targetDate.format('YYYYMMDD')}.json`
+        fileName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}/${tableNamePrefix}_${partitionValue}_${targetDate.format('YYYYMMDD')}.json`;
       } else {
-        fileName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}.json`
+        fileName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}.json`;
       }
-      const file = gcsBucket.file(fileName)
+      const file = gcsBucket.file(fileName);
 
-      const ws = file.createWriteStream({resumeable: false, gzip: true})
+      const ws = file.createWriteStream({resumeable: false, gzip: true});
       ws.on('error', (err) => {
         console.log(err);
         error(err);
@@ -233,25 +248,30 @@ const executeDataQuery = (partitionValue = null, partitionBy = null) => {
     if (partitionBy) {
       tableName = `${tableNamePrefix}_${partitionValue}_${targetDate.format('YYYYMMDD')}`;
     } else {
-      tableName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}`
+      tableName = `${tableNamePrefix}_${targetDate.format('YYYYMMDD')}`;
     }
-    const table = dataset.table(tableName)
+    const table = dataset.table(tableName);
     console.log('Load table', tableName);
-    return table.import(file, {
+    return table.load(file, {
       schema: {
         fields: schema
       },
       sourceFormat: 'NEWLINE_DELIMITED_JSON',
       writeDisposition: 'WRITE_TRUNCATE'
-    })
+    });
   }).then((response) => {
     console.dir(response);
     console.dir(response[0].status);
     const job = bigquery.job(response[0].jobReference.jobId);
+
+    if (response[0].status.state === 'DONE') {
+      return
+    }
+
     return new Promise(function (resolve, reject) {
       job.on('complete', function () {
         setTimeout(function () {
-          resolve()
+          resolve();
         }, 1000);
       });
       job.on('error', function (err) {
@@ -284,8 +304,8 @@ const executePartitionedData = (partitionBy) => {
         return executeDataQuery(serviceId, partitionBy);
       };
     }), 1);
-  })
-}
+  });
+};
 
 console.log('Get schema');
 s3.getObject({Bucket: process.env.CONFIG_BUCKET, Key: process.env.CONFIG_KEY}).promise().then((obj) => {
@@ -295,6 +315,18 @@ s3.getObject({Bucket: process.env.CONFIG_BUCKET, Key: process.env.CONFIG_KEY}).p
     region: config.aws.athena.region
   });
 
+  dateCriteria = `((year = ${year} AND month = ${month} AND day = ${day}) OR 
+(year = ${t_year} AND month = ${t_month} AND day = ${t_day}))
+AND date_parse(datetime, '%d/%b/%Y:%H:%i:%s +0000') >= timestamp '${moment(targetDate).startOf('day').format('YYYY-MM-DD HH:mm:ss')}'
+AND date_parse(datetime, '%d/%b/%Y:%H:%i:%s +0000') <= timestamp '${moment(targetDate).endOf('day').format('YYYY-MM-DD HH:mm:ss')}'`;
+
+  if (config.log_type === 'cloudfront') {
+    dateCriteria = `((year = ${year} AND month = ${month} AND day = ${day}) OR 
+(year = ${t_year} AND month = ${t_month} AND day = ${t_day}))
+AND date_parse(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s') >= timestamp '${moment(targetDate).startOf('day').format('YYYY-MM-DD HH:mm:ss')}'
+AND date_parse(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s') <= timestamp '${moment(targetDate).endOf('day').format('YYYY-MM-DD HH:mm:ss')}'`;
+  }
+
   return s3.getObject({Bucket: process.env.CONFIG_BUCKET, Key: process.env.GCLOUD_KEY}).promise();
 }).then((obj) => {
   const key = JSON.parse(obj.Body.toString());
@@ -303,17 +335,19 @@ s3.getObject({Bucket: process.env.CONFIG_BUCKET, Key: process.env.CONFIG_KEY}).p
     credentials: key
   };
 
-  bigquery = require('@google-cloud/bigquery')(gcloudConfig);
+  const BigQuery = require('@google-cloud/bigquery');
+  bigquery = new BigQuery(gcloudConfig);
   dataset = bigquery.dataset(config.gcloud.bigquery.dataset);
 
-  storage = require('@google-cloud/storage')(gcloudConfig);
+  const {Storage} = require('@google-cloud/storage');
+  storage = new Storage(gcloudConfig);
   gcsBucket = storage.bucket(config.gcloud.storage.bucket);
 
   return s3.getObject({Bucket: config.aws.s3.schema_bucket, Key: config.aws.s3.schema_object}).promise();
 }).then((obj) => {
   schema = JSON.parse(obj.Body.toString());
 
-  const msckQuery = `MSCK REPAIR TABLE ${config.aws.athena.database}.${config.aws.athena.table}`
+  const msckQuery = `MSCK REPAIR TABLE ${config.aws.athena.database}.${config.aws.athena.table}`;
   console.log(msckQuery);
 
   return athena.startQueryExecution({
@@ -329,9 +363,9 @@ s3.getObject({Bucket: process.env.CONFIG_BUCKET, Key: process.env.CONFIG_KEY}).p
   return waitAthena(result.QueryExecutionId);
 }).then(() => {
   if (config.partition) {
-    return executePartitionedData(config.partition)
+    return executePartitionedData(config.partition);
   } else {
-    return executeDataQuery()
+    return executeDataQuery();
   }
 }).then(() => {
   console.log(`Completed ${targetDate.format('YYYYMMDD')}`);

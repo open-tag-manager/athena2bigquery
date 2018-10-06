@@ -4,4 +4,5 @@ node_modules
 config/*.json
 config/*.yml
 !config/sample.yml
-!config/schema.json
+!config/schema_cf.json
+!config/schema_s3.json
